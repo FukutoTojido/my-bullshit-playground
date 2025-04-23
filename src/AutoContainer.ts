@@ -6,13 +6,14 @@ import Yoga, {
 	type Display,
 	Edge,
 	type FlexDirection,
-	type Gutter,
+	Gutter,
 	type Justify,
 	type Node,
 	type Overflow,
 	type PositionType,
 	type Wrap,
 } from "yoga-layout";
+import AnimationController, { type AnimationOptions } from "./AnimationController";
 
 export type Styles = {
 	alignContent?: Align;
@@ -55,6 +56,8 @@ export default class YogaContainer extends Container {
 	background: Graphics;
 	color = Math.random() * 0xffffff;
 
+	animations = new AnimationController();
+
 	constructor({ styles, id }: YogaContainerOptions) {
 		super();
 		this.yogaNode = Yoga.Node.create();
@@ -66,10 +69,12 @@ export default class YogaContainer extends Container {
 			this.label = id;
 		}
 
-		if (styles) this.setStyles(styles);
+		if (styles) this._setStyles(styles);
 	}
 
-	setStyles(styles: Styles) {
+	private _setStyles(styles: Styles) {
+		if (Object.entries(styles).length === 0) return;
+
 		for (const key of Object.keys(styles) as (keyof Styles)[]) {
 			const value = styles[key];
 			switch (key) {
@@ -197,6 +202,47 @@ export default class YogaContainer extends Container {
 		ancestor.updateSelf();
 	}
 
+	setStyles(styles: Styles, animation?: AnimationOptions) {
+		if (!animation) {
+			this._setStyles(styles);
+			return;
+		};
+
+		const { width, height, gap, ...rest } = styles;
+		const { easing, duration } = animation;
+		this._setStyles(rest);
+
+		if (width !== undefined) {
+			const old = this.yogaNode.getComputedWidth();
+			this.animations.addAnimation("width", old, width, (value) => {
+				this._setStyles({
+					width: value as number | "auto" | `${number}%` | undefined,
+				});
+			}, duration, easing);
+		}
+
+		if (height !== undefined) {
+			const old = this.yogaNode.getComputedHeight();
+			this.animations.addAnimation("height", old, height, (value) => {
+				this._setStyles({
+					height: value as number | "auto" | `${number}%` | undefined,
+				});
+			});
+		}
+
+		if (gap !== undefined) {
+			const old = this.yogaNode.getGap(Gutter.All);
+			this.animations.addAnimation("gap", old, gap.gapLength, (value) => {
+				this._setStyles({
+					gap: {
+						gutter: Gutter.All,
+						gapLength: value as number | `${number}%` | undefined
+					},
+				});
+			}, duration);
+		}
+	}
+
 	findAncestor(): YogaContainer {
 		let curr: YogaContainer = this;
 		// console.log(curr.label);
@@ -247,10 +293,7 @@ export default class YogaContainer extends Container {
 		// this.width = width;
 		// this.height = height;
 
-		this.background
-			.clear()
-			.rect(0, 0, width, height)
-			.fill(this.color);
+		this.background.clear().rect(0, 0, width, height).fill(this.color);
 		// console.log(
 		// 	`${level}${this.label}, ${x}, ${y}, ${width}, ${height}`,
 		// );

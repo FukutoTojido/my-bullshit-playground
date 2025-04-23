@@ -2,7 +2,8 @@ import { BeatmapDecoder, SlidableObject } from "osu-parsers";
 import { Application, RenderTarget, Assets, Sprite, Container } from "pixi.js";
 import DrawableSlider from "./DrawableSlider";
 import YogaContainer from "./AutoContainer";
-import { Align, Display, FlexDirection, Justify } from "yoga-layout";
+import { Align, Display, FlexDirection, Gutter, Justify } from "yoga-layout";
+import { tweenGroup } from "./AnimationController";
 
 const mapFile = await (await fetch("/tanebi.osu")).text();
 const decoder = new BeatmapDecoder();
@@ -51,6 +52,7 @@ const animate = (p = 1.0) => {
 	const pTail = Math.min(1, PROGRESS);
 
 	for (const mesh of sliderMeshes) mesh.update(pHead, pTail);
+	tweenGroup.update();
 
 	// if (PROGRESS > 1) return;
 	requestAnimationFrame(() => animate());
@@ -70,12 +72,16 @@ container.y = 0;
 const yogaContainer = new YogaContainer({
 	id: "main",
 	styles: {
-		width: 400,
+		width: 800,
 		height: 300,
 		display: Display.Flex,
 		flexDirection: FlexDirection.Row,
 		alignItems: Align.Center,
 		justifyContent: Justify.Center,
+		gap: {
+			gutter: Gutter.All,
+			gapLength: 0
+		}
 	},
 });
 
@@ -91,46 +97,62 @@ const child1 = new YogaContainer({
 	id: "child1",
 	styles: {
 		height: "100%",
-		flex: 1
+		flex: 1,
 	},
 });
 
 yogaContainer.addFlexChildren(child1, child0);
 
-let t = 0;
-const hiphop = () => {
-	t += 0.01;
-
-	if (t > 2) {
-		yogaContainer.setStyles({
-			width: Math.round(400 * (1 + 2)),
-		});
-		return;
-	}
-
-	const width = Math.round(400 * (1 + t));
-	yogaContainer.setStyles({
-		width,
-	});
-	requestAnimationFrame(() => hiphop());
-};
-
-// requestAnimationFrame(() => hiphop());
-
 app.stage.addChild(container);
-// app.stage.addChild(yogaContainer);
+
+const c = new Container();
+c.addChild(yogaContainer);
+c.y = 700;
+
+app.stage.addChild(c);
 document.body.append(app.canvas);
 
 let toggle = false;
-document.querySelector<HTMLButtonElement>("button")?.addEventListener("click", () => {
-	if (!toggle) {
-		child0.setStyles({ width: 100 });
-	}
+document
+	.querySelector<HTMLButtonElement>("button")
+	?.addEventListener("click", () => {
+		if (!toggle) {
+			yogaContainer.setStyles(
+				{
+					gap: { gutter: Gutter.All, gapLength: 10 },
+				},
+				{
+					duration: 200,
+				},
+			);
+			child0.setStyles(
+				{
+					width: 300,
+				},
+				{
+					duration: 200,
+				},
+			);
+		}
 
-	if (toggle) {
-		child0.setStyles({ width: 0 });
-	}
+		if (toggle) {
+			yogaContainer.setStyles(
+				{
+					gap: { gutter: Gutter.All, gapLength: 0 },
+				},
+				{
+					duration: 200,
+				},
+			);
+			child0.setStyles(
+				{
+					width: 0,
+				},
+				{
+					duration: 200,
+				},
+			);
+		}
 
-	toggle = !toggle;
-})
-
+		toggle = !toggle;
+	});
