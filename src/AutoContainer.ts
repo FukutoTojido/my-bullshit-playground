@@ -1,19 +1,27 @@
-import { Container, Graphics } from "pixi.js";
+import {
+	Container,
+	type FillInput,
+	Graphics,
+	Rectangle,
+	type StrokeStyle,
+} from "pixi.js";
 import Yoga, {
 	type Align,
 	type BoxSizing,
 	Direction,
 	type Display,
-	Edge,
+	type Edge,
 	type FlexDirection,
 	Gutter,
 	type Justify,
 	type Node,
-	type Overflow,
+	Overflow,
 	type PositionType,
 	type Wrap,
 } from "yoga-layout";
-import AnimationController, { type AnimationOptions } from "./AnimationController";
+import AnimationController, {
+	type AnimationOptions,
+} from "./AnimationController";
 
 export type Styles = {
 	alignContent?: Align;
@@ -29,41 +37,76 @@ export type Styles = {
 	flexWrap?: Wrap;
 	gap?: {
 		gutter: Gutter;
-		gapLength: number | `${number}%` | undefined;
+		gapLength: number | "auto" | `${number}%` | undefined;
 	};
 	height?: number | "auto" | `${number}%` | undefined;
 	justifyContent?: Justify;
-	margin?: number | `${number}%` | undefined;
+	margin?: {
+		edge: Edge;
+		margin: number | `${number}%` | undefined;
+	};
 	maxHeight?: number | `${number}%` | undefined;
 	maxWidth?: number | `${number}%` | undefined;
 	minHeight?: number | `${number}%` | undefined;
 	minWidth?: number | `${number}%` | undefined;
 	overflow?: Overflow;
-	padding?: number | `${number}%` | undefined;
+	padding?: {
+		edge: Edge;
+		padding: number | `${number}%` | undefined;
+	};
 	position?: PositionType;
 	boxSizing?: BoxSizing;
 	width?: number | "auto" | `${number}%` | undefined;
+	backgroundColor?: FillInput;
+	borderRadius?: number;
+	border?: StrokeStyle;
 };
 
-type YogaContainerOptions = {
+export type YogaContainerOptions = {
 	styles?: Styles;
 	id?: string;
 };
 
 export default class YogaContainer extends Container {
 	yogaNode: Node;
+	protected _styles: Styles;
 
-	background: Graphics;
-	color = Math.random() * 0xffffff;
+	protected background: Graphics;
+	protected maskGraphics: Graphics;
+	protected borderGraphics: Graphics;
+
+	color: FillInput = {
+		color: 0x000000,
+		alpha: 0,
+	};
+
+	border: StrokeStyle = {
+		color: 0x000000,
+		alpha: 0,
+		width: 0,
+	};
+
+	borderRadius = 0;
 
 	animations = new AnimationController();
 
+	cache = {
+		width: 0,
+		height: 0
+	}
+
 	constructor({ styles, id }: YogaContainerOptions) {
 		super();
+		this._styles = { ...styles };
 		this.yogaNode = Yoga.Node.create();
 
 		this.background = new Graphics();
-		this.addChild(this.background);
+		this.maskGraphics = new Graphics();
+		this.borderGraphics = new Graphics();
+		this.borderGraphics.interactive = false;
+		this.borderGraphics.zIndex = 999999;
+
+		this.addChild(this.background, this.borderGraphics);
 
 		if (id) {
 			this.label = id;
@@ -73,6 +116,7 @@ export default class YogaContainer extends Container {
 	}
 
 	private _setStyles(styles: Styles) {
+		this._styles = { ...this._styles, ...styles };
 		if (Object.entries(styles).length === 0) return;
 
 		for (const key of Object.keys(styles) as (keyof Styles)[]) {
@@ -149,10 +193,11 @@ export default class YogaContainer extends Container {
 					break;
 				}
 				case "margin": {
-					this.yogaNode.setMargin(
-						Edge.All,
-						value as number | `${number}%` | undefined,
-					);
+					const { margin, edge } = value as {
+						edge: Edge;
+						margin: number | "auto" | `${number}%` | undefined;
+					};
+					this.yogaNode.setMargin(edge, margin);
 					break;
 				}
 				case "maxWidth": {
@@ -174,10 +219,11 @@ export default class YogaContainer extends Container {
 					break;
 				}
 				case "padding": {
-					this.yogaNode.setPadding(
-						Edge.All,
-						value as number | `${number}%` | undefined,
-					);
+					const { padding, edge } = value as {
+						edge: Edge;
+						padding: number | `${number}%` | undefined;
+					};
+					this.yogaNode.setPadding(edge, padding);
 					break;
 				}
 				case "position": {
@@ -194,6 +240,18 @@ export default class YogaContainer extends Container {
 					);
 					break;
 				}
+				case "backgroundColor": {
+					this.color = value as FillInput;
+					break;
+				}
+				case "borderRadius": {
+					this.borderRadius = value as number;
+					break;
+				}
+				case "border": {
+					this.border = { ...(value as StrokeStyle) };
+					break;
+				}
 			}
 		}
 
@@ -206,19 +264,26 @@ export default class YogaContainer extends Container {
 		if (!animation) {
 			this._setStyles(styles);
 			return;
-		};
+		}
 
-		const { width, height, gap, ...rest } = styles;
+		const { width, height, gap, borderRadius, ...rest } = styles;
 		const { easing, duration } = animation;
 		this._setStyles(rest);
 
 		if (width !== undefined) {
 			const old = this.yogaNode.getComputedWidth();
-			this.animations.addAnimation("width", old, width, (value) => {
-				this._setStyles({
-					width: value as number | "auto" | `${number}%` | undefined,
-				});
-			}, duration, easing);
+			this.animations.addAnimation(
+				"width",
+				old,
+				width,
+				(value) => {
+					this._setStyles({
+						width: value as number | "auto" | `${number}%` | undefined,
+					});
+				},
+				duration,
+				easing,
+			);
 		}
 
 		if (height !== undefined) {
@@ -232,14 +297,35 @@ export default class YogaContainer extends Container {
 
 		if (gap !== undefined) {
 			const old = this.yogaNode.getGap(Gutter.All);
-			this.animations.addAnimation("gap", old, gap.gapLength, (value) => {
-				this._setStyles({
-					gap: {
-						gutter: Gutter.All,
-						gapLength: value as number | `${number}%` | undefined
-					},
-				});
-			}, duration);
+			this.animations.addAnimation(
+				"gap",
+				old,
+				gap.gapLength,
+				(value) => {
+					this._setStyles({
+						gap: {
+							gutter: Gutter.All,
+							gapLength: value as number | `${number}%` | undefined,
+						},
+					});
+				},
+				duration,
+			);
+		}
+
+		if (borderRadius !== undefined) {
+			const old = this.borderRadius;
+			this.animations.addAnimation(
+				"borderRadius",
+				old,
+				borderRadius,
+				(value) => {
+					this._setStyles({
+						borderRadius: value as number,
+					});
+				},
+				duration,
+			);
 		}
 	}
 
@@ -268,6 +354,8 @@ export default class YogaContainer extends Container {
 			i++;
 		}
 
+		this.addChild(this.borderGraphics);
+
 		const ancestor = this.findAncestor();
 		ancestor.yogaNode.calculateLayout(undefined, undefined, Direction.LTR);
 		ancestor.updateSelf();
@@ -282,28 +370,61 @@ export default class YogaContainer extends Container {
 		ancestor.updateSelf();
 	}
 
+	reColor() {
+		const width = this.yogaNode.getComputedWidth();
+		const height = this.yogaNode.getComputedHeight();
+		const overflow = this.yogaNode.getOverflow();
+
+		this.background
+			.clear()
+			.roundRect(0, 0, width, height, this.borderRadius)
+			.fill(this.color);
+		this.borderGraphics
+			.clear()
+			.roundRect(0, 0, width, height, this.borderRadius)
+			.stroke({ ...this.border, alignment: 1 });
+		this.maskGraphics
+			.clear()
+			.roundRect(0, 0, width, height, this.borderRadius)
+			.fill({ color: 0xffffff, alpha: 1 });
+		this.boundsArea = new Rectangle(0, 0, width, height);
+
+		switch (overflow) {
+			case Overflow.Hidden: {
+				this.addChild(this.maskGraphics);
+				this.mask = this.maskGraphics;
+				break;
+			}
+			default: {
+				this.mask = null;
+				this.removeChild(this.maskGraphics);
+			}
+		}
+	}
+
 	updateSelf(level = "") {
 		const x = this.yogaNode.getComputedLeft();
 		const y = this.yogaNode.getComputedTop();
-		const width = this.yogaNode.getComputedWidth();
-		const height = this.yogaNode.getComputedHeight();
 
 		this.x = x;
 		this.y = y;
-		// this.width = width;
-		// this.height = height;
 
-		this.background.clear().rect(0, 0, width, height).fill(this.color);
-		// console.log(
-		// 	`${level}${this.label}, ${x}, ${y}, ${width}, ${height}`,
-		// );
+		if (this.cache.width !== this.yogaNode.getComputedWidth() || this.cache.height !== this.yogaNode.getComputedHeight()) {
+			this.reColor();
+			this.cache.width = this.yogaNode.getComputedWidth();
+			this.cache.height = this.yogaNode.getComputedHeight();
+		}
 
 		const children = this.children.filter(
 			(child) => child instanceof YogaContainer,
 		);
+
+		let log = `${level}${this.label}`;
 		for (const child of children) {
-			// console.log(`${level}Calculating for child: ${child.label}`);
-			child.updateSelf(`${level}\t`);
+			log += `\n${child.updateSelf(`${level}\t`)}`;
 		}
+
+		// if (level === "") console.log(log);
+		return log;
 	}
 }
